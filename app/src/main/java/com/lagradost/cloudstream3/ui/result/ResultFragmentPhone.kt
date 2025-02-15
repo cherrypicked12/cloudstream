@@ -16,6 +16,7 @@ import android.view.animation.Animation
 import android.view.animation.DecelerateInterpolator
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.Toast
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -96,6 +97,9 @@ open class ResultFragmentPhone : FullScreenPlayer() {
     protected var resultBinding: FragmentResultBinding? = null
     protected var recommendationBinding: ResultRecommendationsBinding? = null
     protected var syncBinding: ResultSyncBinding? = null
+
+    private var isAscendingOrder = true // Default to ascending order
+    private lateinit var episodes: MutableList<ResultEpisode>
 
     override var layout = R.layout.fragment_result_swipe
 
@@ -309,6 +313,16 @@ open class ResultFragmentPhone : FullScreenPlayer() {
         super.onStop()
     }
 
+    private fun sortEpisodes(ascending: Boolean) {
+        if (ascending) {
+            // Sort episodes in ascending order by episode number
+            episodes.sortWith(compareBy { it.episode })
+        } else {
+            // Sort episodes in descending order by episode number
+            episodes.sortWith(compareByDescending { it.episode })
+        }
+    }
+
     private fun updateUI(id: Int?) {
         syncModel.updateUserData()
         viewModel.reloadEpisodes()
@@ -335,6 +349,20 @@ open class ResultFragmentPhone : FullScreenPlayer() {
                 storedData.start
             )
 
+        // ===== Sorting Button =====
+        val sortButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.sortButton)
+        sortButton.setOnClickListener {
+            // Toggle sorting order
+            isAscendingOrder = !isAscendingOrder
+
+            // Sort the episodes based on the current order
+            sortEpisodes(isAscendingOrder)
+
+            // Update the adapter with the sorted list
+            (resultBinding?.resultEpisodes?.adapter as? EpisodeAdapter)?.updateList(episodes)
+        }
+
+
         setUrl(storedData.url)
         syncModel.addFromUrl(storedData.url)
         val api = APIHolder.getApiFromNameNull(storedData.apiName)
@@ -358,7 +386,7 @@ open class ResultFragmentPhone : FullScreenPlayer() {
         binding?.resultSearch?.setOnClickListener {
             QuickSearchFragment.pushSearch(activity, storedData.name)
         }
-        
+
         resultBinding?.apply {
             resultReloadConnectionerror.setOnClickListener {
                 viewModel.load(
@@ -622,13 +650,20 @@ open class ResultFragmentPhone : FullScreenPlayer() {
             setTrailers(trailers.flatMap { it.mirros }) // I dont care about subtitles yet!
         }
 
-        observeNullable(viewModel.episodes) { episodes ->
+        observeNullable(viewModel.episodes) { episodesResource ->
             resultBinding?.apply {
                 // no failure?
-                resultEpisodeLoading.isVisible = episodes is Resource.Loading
-                resultEpisodes.isVisible = episodes is Resource.Success
-                if (episodes is Resource.Success) {
-                    (resultEpisodes.adapter as? EpisodeAdapter)?.updateList(episodes.value)
+                resultEpisodeLoading.isVisible = episodesResource is Resource.Loading
+                resultEpisodes.isVisible = episodesResource is Resource.Success
+                if (episodesResource is Resource.Success) {
+                    // Initialize the episodes list (class-level variable)
+                    episodes = episodesResource.value.toMutableList()
+
+                    // Sort episodes if needed
+                    sortEpisodes(isAscendingOrder)
+
+                    // Update the adapter with the sorted list
+                    (resultEpisodes.adapter as? EpisodeAdapter)?.updateList(episodes)
                 }
             }
         }
